@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/loadlab/web/middleware"
+	"github.com/loadlab/websvc/middleware"
 	"go.uber.org/zap"
 )
 

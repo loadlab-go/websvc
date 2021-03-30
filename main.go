@@ -1,19 +1,35 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"go.uber.org/zap"
 )
 
 var (
-	flagListenAddr = flag.String("l", ":8080", "listen address")
+	flagListenAddr      = flag.String("listen", ":8080", "listen address")
+	flagEtcdEndpoints   = flag.String("etcd-endpoints", "localhost:2379", "etcd endpoints")
+	flagAdvertiseClient = flag.String("advertise-client", "localhost:8080", "advertise client url")
 )
 
 func main() {
 	flag.Parse()
+
+	mustInitEtcdCli(*flagEtcdEndpoints)
+
+	go func() {
+		err := registerEndpointWithRetry(*flagAdvertiseClient)
+		if err != nil {
+			logger.Panic("register endpoint faield", zap.Error(err))
+		}
+	}()
 
 	srv := &http.Server{
 		Handler: buildRouter(),
@@ -25,8 +41,24 @@ func main() {
 	}
 	logger.Info("web server startup", zap.String("listen", l.Addr().String()))
 
-	err = srv.Serve(l)
-	if err != nil {
-		logger.Info("web server serve failed", zap.Error(err))
-	}
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		err = srv.Serve(l)
+		if err == http.ErrServerClosed {
+			logger.Info("http server closed")
+			return
+		}
+		if err != nil {
+			logger.Panic("web server serve failed", zap.Error(err))
+		}
+	}()
+
+	s := <-sigCh
+
+	logger.Warn("exit signal", zap.String("signal", s.String()))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	_ = srv.Shutdown(ctx)
 }

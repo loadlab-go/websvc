@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/loadlab/web/middleware"
+	"github.com/loadlab/websvc/middleware"
 )
 
 func buildRouter() *gin.Engine {
