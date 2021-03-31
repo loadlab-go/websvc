@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/loadlab-go/websvc/idl/proto/authpb"
-	"github.com/loadlab-go/websvc/idl/proto/userpb"
+	authpb "github.com/loadlab-go/pkg/proto/auth"
+	userpb "github.com/loadlab-go/pkg/proto/user"
 	"github.com/loadlab-go/websvc/middleware"
 	"go.uber.org/zap"
 )
@@ -43,9 +43,20 @@ func loginHandler(c *gin.Context) {
 }
 
 func registerHandler(c *gin.Context) {
+	var registerReq struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	err := c.ShouldBindJSON(&registerReq)
+	if err != nil {
+		middleware.MustGetZapLog(c).Warn("parse payload failed", zap.Error(err))
+		c.JSON(http.StatusBadRequest, errResponse(fmt.Errorf("parse payload failed: %v", err)))
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second*3)
 	defer cancel()
-	createResp, err := userClient.Create(ctx, &userpb.CreateRequest{})
+	createResp, err := userClient.Create(ctx, &userpb.CreateRequest{Username: registerReq.Username, Password: registerReq.Password})
 	if err != nil {
 		middleware.MustGetZapLog(c).Warn("register failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, errResponse(fmt.Errorf("register failed: %v", err)))

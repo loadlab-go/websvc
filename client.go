@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/loadlab-go/websvc/idl/proto/authpb"
-	"github.com/loadlab-go/websvc/idl/proto/userpb"
+	authpb "github.com/loadlab-go/pkg/proto/auth"
+	userpb "github.com/loadlab-go/pkg/proto/user"
 	"go.uber.org/zap"
 )
 
