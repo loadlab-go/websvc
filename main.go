@@ -31,6 +31,9 @@ func main() {
 		}
 	}()
 
+	mustDiscoverServices()
+	logger.Info("discover services succeed")
+
 	srv := &http.Server{
 		Handler: buildRouter(),
 	}
@@ -44,21 +47,28 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	go func() {
-		err = srv.Serve(l)
-		if err == http.ErrServerClosed {
-			logger.Info("http server closed")
-			return
-		}
-		if err != nil {
-			logger.Panic("web server serve failed", zap.Error(err))
-		}
-	}()
+	go signalSet(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	})
+
+	err = srv.Serve(l)
+	if err == http.ErrServerClosed {
+		logger.Info("http server closed")
+		return
+	}
+	if err != nil {
+		logger.Panic("web server serve failed", zap.Error(err))
+	}
+}
+
+func signalSet(cb func()) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	s := <-sigCh
-
 	logger.Warn("exit signal", zap.String("signal", s.String()))
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-	_ = srv.Shutdown(ctx)
+
+	cb()
 }
