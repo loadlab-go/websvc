@@ -1,21 +1,21 @@
-package main
+package resp
 
-type response struct {
+type Response struct {
 	OK   bool        `json:"ok"`
 	Msg  string      `json:"msg"`
 	Data interface{} `json:"data"`
 }
 
-func okResponse(data interface{}) response {
-	return response{
+func OkResponse(data interface{}) Response {
+	return Response{
 		true,
 		"success",
 		data,
 	}
 }
 
-func errResponse(err error) response {
-	return response{
+func ErrResponse(err error) Response {
+	return Response{
 		false,
 		err.Error(),
 		nil,

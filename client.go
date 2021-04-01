@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	authClient authpb.AuthClient
+	jwtClient  authpb.JWTClient
 	userClient userpb.UserClient
 )
 
@@ -16,7 +16,7 @@ func mustDiscoverServices() error {
 	if err != nil {
 		logger.Panic("grpc dial auth-svc failed", zap.Error(err))
 	}
-	authClient = authpb.NewAuthClient(authcc)
+	jwtClient = authpb.NewJWTClient(authcc)
 
 	usercc, err := grpcDial("user-svc")
 	if err != nil {

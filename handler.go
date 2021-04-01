@@ -10,6 +10,7 @@ import (
 	authpb "github.com/loadlab-go/pkg/proto/auth"
 	userpb "github.com/loadlab-go/pkg/proto/user"
 	"github.com/loadlab-go/websvc/middleware"
+	"github.com/loadlab-go/websvc/resp"
 	"go.uber.org/zap"
 )
 
@@ -21,25 +22,31 @@ func loginHandler(c *gin.Context) {
 	err := c.ShouldBindJSON(&loginReq)
 	if err != nil {
 		middleware.MustGetZapLog(c).Warn("parse payload failed", zap.Error(err))
-		c.JSON(http.StatusBadRequest, errResponse(fmt.Errorf("parse payload failed: %v", err)))
+		c.JSON(http.StatusBadRequest, resp.ErrResponse(fmt.Errorf("parse payload failed: %v", err)))
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second*3)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second*5)
 	defer cancel()
-	authResp, err := authClient.Authenticate(ctx, &authpb.AuthenticateRequest{Username: loginReq.Password, Password: loginReq.Password})
+	validateResp, err := userClient.ValidatePassword(ctx, &userpb.ValidatePasswordRequest{Username: loginReq.Username, Password: loginReq.Password})
 	if err != nil {
-		middleware.MustGetZapLog(c).Warn("authenticate failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, errResponse(fmt.Errorf("authenticate failed: %v", err)))
+		middleware.MustGetZapLog(c).Warn("validate password failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, resp.ErrResponse(fmt.Errorf("validate password failed: %v", err)))
+		return
+	}
+	tokenResp, err := jwtClient.GenerateJWT(ctx, &authpb.GenerateJWTRequest{Id: validateResp.Id, Username: loginReq.Password})
+	if err != nil {
+		middleware.MustGetZapLog(c).Warn("generate auth token failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, resp.ErrResponse(fmt.Errorf("generate auth token failed: %v", err)))
 		return
 	}
 
 	var loginResp struct {
-		JWT string `json:"jwt"`
+		Token string `json:"token"`
 	}
-	loginResp.JWT = authResp.Jwt
+	loginResp.Token = tokenResp.Token
 
-	c.JSON(http.StatusOK, okResponse(loginResp))
+	c.JSON(http.StatusOK, resp.OkResponse(loginResp))
 }
 
 func registerHandler(c *gin.Context) {
@@ -50,7 +57,7 @@ func registerHandler(c *gin.Context) {
 	err := c.ShouldBindJSON(&registerReq)
 	if err != nil {
 		middleware.MustGetZapLog(c).Warn("parse payload failed", zap.Error(err))
-		c.JSON(http.StatusBadRequest, errResponse(fmt.Errorf("parse payload failed: %v", err)))
+		c.JSON(http.StatusBadRequest, resp.ErrResponse(fmt.Errorf("parse payload failed: %v", err)))
 		return
 	}
 
@@ -59,10 +66,10 @@ func registerHandler(c *gin.Context) {
 	createResp, err := userClient.Create(ctx, &userpb.CreateRequest{Username: registerReq.Username, Password: registerReq.Password})
 	if err != nil {
 		middleware.MustGetZapLog(c).Warn("register failed", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, errResponse(fmt.Errorf("register failed: %v", err)))
+		c.JSON(http.StatusInternalServerError, resp.ErrResponse(fmt.Errorf("register failed: %v", err)))
 		return
 	}
-	c.JSON(http.StatusOK, okResponse(createResp.Id))
+	c.JSON(http.StatusOK, resp.OkResponse(createResp.Id))
 }
 
 func createTodoHandler(c *gin.Context) {
