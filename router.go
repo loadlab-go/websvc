@@ -11,13 +11,21 @@ import (
 type jwtValidator struct {
 }
 
-func (v *jwtValidator) Validate(ctx context.Context, jwt string) error {
+func (v *jwtValidator) Validate(ctx context.Context, jwt string) (middleware.Claims, error) {
 	validateResp, err := jwtClient.ValidateJWT(ctx, &authpb.ValidateJWTRequest{Token: jwt})
 	if err != nil {
-		return err
+		return middleware.Claims{}, err
 	}
-	_ = validateResp
-	return nil
+
+	return middleware.Claims{
+		Aud: validateResp.Aud,
+		Exp: validateResp.Exp,
+		Jti: validateResp.Jti,
+		Iat: validateResp.Iat,
+		Iss: validateResp.Iss,
+		Nbf: validateResp.Nbf,
+		Sub: validateResp.Sub,
+	}, nil
 }
 
 func authRequired() gin.HandlerFunc {

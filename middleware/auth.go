@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -12,8 +13,20 @@ import (
 	"go.uber.org/zap"
 )
 
+const claimsKey = "middleware-claims-key"
+
 type validator interface {
-	Validate(ctx context.Context, token string) error
+	Validate(ctx context.Context, token string) (Claims, error)
+}
+
+type Claims struct {
+	Aud []string
+	Exp int64
+	Jti string
+	Iat int64
+	Iss string
+	Nbf int64
+	Sub string
 }
 
 func getJWTFromContext(c *gin.Context) (string, error) {
@@ -39,11 +52,25 @@ func AuthRequired(v validator, logger *zap.Logger) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, resp.ErrResponse(err))
 			return
 		}
-		err = v.Validate(c.Request.Context(), jwt)
+
+		claims, err := v.Validate(c.Request.Context(), jwt)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, resp.ErrResponse(err))
 			return
 		}
+		c.Set(claimsKey, claims)
 		c.Next()
 	}
+}
+
+func GetClaims(c *gin.Context) (Claims, error) {
+	v, exist := c.Get(claimsKey)
+	if !exist {
+		return Claims{}, errors.New("there is no claims")
+	}
+	claims, ok := v.(Claims)
+	if !ok {
+		return Claims{}, fmt.Errorf("type error, expect Claims, actual is %v", reflect.TypeOf(v).Kind())
+	}
+	return claims, nil
 }
