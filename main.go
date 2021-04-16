@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -10,6 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/opentracing-contrib/go-stdlib/nethttp"
+	"github.com/opentracing/opentracing-go"
+	"github.com/uber/jaeger-client-go/config"
 	"go.uber.org/zap"
 )
 
@@ -21,6 +26,12 @@ var (
 
 func main() {
 	flag.Parse()
+
+	tracerCloser, err := initTracer()
+	if err != nil {
+		logger.Panic("init tracer failed", zap.Error(err))
+	}
+	defer tracerCloser.Close()
 
 	mustInitEtcdCli(*flagEtcdEndpoints)
 
@@ -34,8 +45,12 @@ func main() {
 	mustDiscoverServices()
 	logger.Info("discover services succeed")
 
+	tracer := opentracing.GlobalTracer()
+	mw := nethttp.Middleware(tracer, buildRouter(), nethttp.OperationNameFunc(func(r *http.Request) string {
+		return fmt.Sprintf("HTTP %s %s", r.Method, r.URL.Path)
+	}))
 	srv := &http.Server{
-		Handler: buildRouter(),
+		Handler: mw,
 	}
 
 	l, err := net.Listen("tcp", *flagListenAddr)
@@ -71,4 +86,18 @@ func signalSet(cb func()) {
 	logger.Warn("exit signal", zap.String("signal", s.String()))
 
 	cb()
+}
+
+func initTracer() (io.Closer, error) {
+	cfg := config.Configuration{ServiceName: "websvc"}
+	_, err := cfg.FromEnv()
+	if err != nil {
+		return nil, err
+	}
+	tracer, tracerCloser, err := cfg.NewTracer()
+	if err != nil {
+		return nil, err
+	}
+	opentracing.InitGlobalTracer(tracer)
+	return tracerCloser, nil
 }
